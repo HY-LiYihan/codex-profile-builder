@@ -1,0 +1,9 @@
+[project]
+name = "codex-nuwa-memory"
+version = "0.1.0"
+description = "Local-first Codex history memory and AI collaboration reports"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
