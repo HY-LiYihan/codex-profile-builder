@@ -38,13 +38,19 @@ The skill is local-first. It reads Codex history from the user's machine, redact
    python3 scripts/codex_profile_builder.py agents-preview --limit 30
    ```
 
-3. Generate a playful collaboration report:
+3. Search relevant history before summarizing:
+
+   ```bash
+   python3 scripts/codex_profile_builder.py search "AGENTS.md memory" --top 5
+   ```
+
+4. Generate a playful collaboration report:
 
    ```bash
    python3 scripts/codex_profile_builder.py vibe-check --limit 80
    ```
 
-4. Apply a managed block only after the user approves:
+5. Apply a managed block only after the user approves:
 
    ```bash
    python3 scripts/codex_profile_builder.py agents-preview --limit 30 --agents-md ./AGENTS.md --apply

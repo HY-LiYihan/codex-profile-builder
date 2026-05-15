@@ -32,6 +32,11 @@ class CodexProfileBuilderTests(unittest.TestCase):
         self.assertNotIn("old", result)
         self.assertTrue(result.startswith("a\n"))
 
+    def test_auto_context_detection(self):
+        self.assertTrue(profile_builder.is_auto_context_message("# AGENTS.md instructions for /tmp/project"))
+        self.assertTrue(profile_builder.is_auto_context_message("<environment_context>\n"))
+        self.assertFalse(profile_builder.is_auto_context_message("请帮我研究 AGENTS.md 记忆方案"))
+
 
 if __name__ == "__main__":
     unittest.main()

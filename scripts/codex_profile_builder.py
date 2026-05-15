@@ -22,7 +22,7 @@ SECRET_PATTERNS = [
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{12,}"),
     re.compile(r"(?is)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"(?i)\b(cookie|authorization)\s*:\s*[^\n]+"),
-    re.compile(r"\b[A-Za-z0-9_/-]{48,}\b"),
+    re.compile(r"\b[A-Za-z0-9_+=.-]{64,}\b"),
 ]
 
 TECH_TERMS = [
@@ -182,6 +182,17 @@ def message_text(payload: dict[str, object], stats: RedactionStats) -> str:
     return "\n".join(parts).strip()
 
 
+def is_auto_context_message(text: str) -> bool:
+    stripped = text.lstrip()
+    auto_prefixes = (
+        "# AGENTS.md instructions",
+        "<environment_context>",
+        "<subagent_notification>",
+        "<turn_aborted>",
+    )
+    return stripped.startswith(auto_prefixes)
+
+
 def parse_rollout(path: Path, stats: RedactionStats, max_messages: int = 80) -> list[Message]:
     messages: list[Message] = []
     if not path.is_file():
@@ -204,6 +215,8 @@ def parse_rollout(path: Path, stats: RedactionStats, max_messages: int = 80) -> 
                 continue
             text = message_text(payload, stats)
             if not text:
+                continue
+            if is_auto_context_message(text):
                 continue
             messages.append(Message(role=role, text=text, timestamp=str(event.get("timestamp") or "")))
             if len(messages) >= max_messages:
@@ -238,6 +251,60 @@ def is_natural_user_text(text: str) -> bool:
 def count_terms(texts: Iterable[str], terms: Iterable[str]) -> dict[str, int]:
     joined = "\n".join(texts)
     return {term: joined.count(term) for term in terms if joined.count(term)}
+
+
+def query_terms(query: str) -> list[str]:
+    terms = re.findall(r"[A-Za-z0-9_.+-]+|[\u4e00-\u9fff]{2,}", query.lower())
+    return list(dict.fromkeys(term for term in terms if term.strip()))
+
+
+def compact_text(text: str, limit: int = 220) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[: limit - 1] + "…" if len(text) > limit else text
+
+
+def first_snippet(messages: list[Message], terms: list[str], role: str = "user") -> str:
+    candidates = [message.text for message in messages if role == "both" or message.role == role]
+    lowered_terms = [term.lower() for term in terms]
+    for text in candidates:
+        low = text.lower()
+        if any(term in low for term in lowered_terms):
+            return compact_text(text)
+    return compact_text(candidates[0]) if candidates else ""
+
+
+def score_thread(thread: ThreadRecord, terms: list[str], max_updated: int) -> tuple[float, list[str], int]:
+    title = thread.title.lower()
+    cwd = thread.cwd.lower()
+    user_text = "\n".join(message.text for message in thread.messages if message.role == "user").lower()
+    assistant_text = "\n".join(message.text for message in thread.messages if message.role == "assistant").lower()
+    lexical = 0.0
+    matched = 0
+    reasons: list[str] = []
+    for term in terms:
+        term_score = 0.0
+        if term in title:
+            term_score += 14
+            reasons.append(f"title:{term}")
+        if term in cwd:
+            term_score += 8
+            reasons.append(f"cwd:{term}")
+        user_hits = user_text.count(term)
+        assistant_hits = assistant_text.count(term)
+        if user_hits:
+            term_score += min(user_hits, 5) * 5
+            reasons.append(f"user:{term}")
+        if assistant_hits:
+            term_score += min(assistant_hits, 5) * 1.2
+            reasons.append(f"assistant:{term}")
+        if term_score:
+            matched += 1
+            lexical += term_score
+    if lexical == 0:
+        return 0.0, [], 0
+    coverage = matched / max(len(terms), 1)
+    recency = max(0.0, 2.0 - ((max_updated - thread.updated_at) / 86400 / 30)) if max_updated else 0.0
+    return lexical * (0.55 + coverage) + recency, reasons[:8], matched
 
 
 def top_cwds(threads: Iterable[ThreadRecord], limit: int = 10) -> list[tuple[str, int]]:
@@ -433,6 +500,52 @@ def scan(args: argparse.Namespace) -> None:
         print(f"- {count:>3} {cwd}")
 
 
+def search(args: argparse.Namespace) -> None:
+    stats = RedactionStats()
+    threads = hydrate_threads(load_threads(codex_home(args.codex_home), args.limit, args.since_days), stats, max_messages=args.max_messages)
+    terms = query_terms(args.query)
+    if not terms:
+        raise SystemExit("No searchable query terms found")
+    max_updated = max((thread.updated_at for thread in threads), default=0)
+    scored = []
+    for thread in threads:
+        score, reasons, matched = score_thread(thread, terms, max_updated)
+        if score <= 0:
+            continue
+        if args.require_all_terms and matched < len(terms):
+            continue
+        scored.append((score, thread, reasons, matched))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    results = []
+    for score, thread, reasons, matched in scored[: args.top]:
+        results.append(
+            {
+                "score": round(score, 2),
+                "matched_terms": matched,
+                "thread_id": thread.id,
+                "title": compact_text(thread.title, 160),
+                "cwd": thread.cwd,
+                "updated_at": unix_to_iso(thread.updated_at),
+                "snippet": first_snippet(thread.messages, terms, args.snippet_role),
+                "reasons": reasons,
+            }
+        )
+    if args.json:
+        print(json.dumps({"query": args.query, "terms": terms, "redaction_hits": stats.hits, "results": results}, ensure_ascii=False, indent=2))
+        return
+    print(f"Query: {args.query}")
+    print(f"Terms: {', '.join(terms)}")
+    print(f"Redaction hits: {stats.hits}")
+    print("")
+    for index, item in enumerate(results, 1):
+        print(f"{index}. {item['title']}")
+        print(f"   score={item['score']} matched={item['matched_terms']}/{len(terms)} cwd={item['cwd']}")
+        print(f"   updated={item['updated_at']}")
+        if item["snippet"]:
+            print(f"   snippet={item['snippet']}")
+        print(f"   reasons={', '.join(item['reasons'])}")
+
+
 def agents_preview(args: argparse.Namespace) -> None:
     stats = RedactionStats()
     threads = hydrate_threads(load_threads(codex_home(args.codex_home), args.limit, args.since_days), stats)
@@ -472,6 +585,17 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--top", type=int, default=10)
     scan_parser.add_argument("--json", action="store_true")
     scan_parser.set_defaults(func=scan)
+
+    search_parser = sub.add_parser("search", help="Search local Codex history with redaction and thread-level ranking")
+    search_parser.add_argument("query")
+    search_parser.add_argument("--limit", type=int, default=200, help="Maximum recent threads to scan")
+    search_parser.add_argument("--since-days", type=int, default=None)
+    search_parser.add_argument("--top", type=int, default=8)
+    search_parser.add_argument("--max-messages", type=int, default=120)
+    search_parser.add_argument("--require-all-terms", action="store_true")
+    search_parser.add_argument("--snippet-role", choices=["user", "assistant", "both"], default="user")
+    search_parser.add_argument("--json", action="store_true")
+    search_parser.set_defaults(func=search)
 
     agents_parser = sub.add_parser("agents-preview", help="Preview or apply an AGENTS.md managed memory block")
     agents_parser.add_argument("--limit", type=int, default=30)
