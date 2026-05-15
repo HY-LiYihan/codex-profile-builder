@@ -1,8 +1,8 @@
 interface:
-  display_name: "Codex Nuwa Memory"
+  display_name: "Codex Profile Builder"
   short_description: "Local Codex history memory and AI collaboration reports"
   brand_color: "#10A37F"
-  default_prompt: "Use $codex-nuwa-memory to scan my local Codex history and preview an AGENTS.md memory update."
+  default_prompt: "Use $codex-profile-builder to scan my local Codex history and preview an AGENTS.md memory update."
 
 policy:
   allow_implicit_invocation: true

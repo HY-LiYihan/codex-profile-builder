@@ -1,12 +1,12 @@
 ---
-name: codex-nuwa-memory
+name: codex-profile-builder
 description: |
-  Build local-first memory from Codex Desktop history. Use when the user asks to understand their prior Codex conversations, update AGENTS.md memory, summarize work habits, extract stable project/user preferences, or generate an AI collaboration personality/vibe-check report. Trigger phrases include "Nuwa memory", "女娲记忆", "read my Codex history", "update AGENTS.md", "what do you know about me", "AI collaboration personality", and "vibe-check".
+  Build local-first memory from Codex Desktop history. Use when the user asks to understand their prior Codex conversations, update AGENTS.md memory, summarize work habits, extract stable project/user preferences, or generate an AI collaboration personality/vibe-check report. Trigger phrases include "profile builder", "read my Codex history", "update AGENTS.md", "what do you know about me", "AI collaboration personality", and "vibe-check".
 ---
 
-# Codex Nuwa Memory
+# Codex Profile Builder
 
-Codex Nuwa Memory turns local Codex Desktop history into two outputs:
+Codex Profile Builder turns local Codex Desktop history into two outputs:
 
 1. Practical memory: stable preferences, project themes, and workflows that can be patched into `AGENTS.md`.
 2. Playful insight: an "AI collaboration personality" report based on how the user talks to agents.
@@ -20,8 +20,8 @@ The skill is local-first. It reads Codex history from the user's machine, redact
 - Only parse normal `user` and `assistant` message items from rollout JSONL. Ignore system/developer/tool schema content.
 - Treat personality reports as entertainment and collaboration-style analysis, not clinical or psychological diagnosis.
 - When updating `AGENTS.md`, only replace the managed block between:
-  - `<!-- codex-nuwa-memory:start -->`
-  - `<!-- codex-nuwa-memory:end -->`
+  - `<!-- codex-profile-builder:start -->`
+  - `<!-- codex-profile-builder:end -->`
 - Default to `--dry-run`. Use `--apply` only when the user explicitly asks to write changes.
 
 ## Quick Workflow
@@ -29,25 +29,25 @@ The skill is local-first. It reads Codex history from the user's machine, redact
 1. Inspect current memory:
 
    ```bash
-   python3 scripts/codex_nuwa_memory.py scan --limit 20
+   python3 scripts/codex_profile_builder.py scan --limit 20
    ```
 
 2. Preview an `AGENTS.md` memory block:
 
    ```bash
-   python3 scripts/codex_nuwa_memory.py agents-preview --limit 30
+   python3 scripts/codex_profile_builder.py agents-preview --limit 30
    ```
 
 3. Generate a playful collaboration report:
 
    ```bash
-   python3 scripts/codex_nuwa_memory.py vibe-check --limit 80
+   python3 scripts/codex_profile_builder.py vibe-check --limit 80
    ```
 
 4. Apply a managed block only after the user approves:
 
    ```bash
-   python3 scripts/codex_nuwa_memory.py agents-preview --limit 30 --agents-md ./AGENTS.md --apply
+   python3 scripts/codex_profile_builder.py agents-preview --limit 30 --agents-md ./AGENTS.md --apply
    ```
 
 ## What To Extract
@@ -72,7 +72,7 @@ Avoid:
 For `AGENTS.md`, keep memory short and operational:
 
 ```md
-<!-- codex-nuwa-memory:start -->
+<!-- codex-profile-builder:start -->
 
 ## User Collaboration Preferences
 
@@ -82,7 +82,7 @@ For `AGENTS.md`, keep memory short and operational:
 
 - ...
 
-<!-- codex-nuwa-memory:end -->
+<!-- codex-profile-builder:end -->
 ```
 
 For vibe-check reports, present the result as a fun collaboration profile:

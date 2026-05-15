@@ -1,5 +1,5 @@
 [project]
-name = "codex-nuwa-memory"
+name = "codex-profile-builder"
 version = "0.1.0"
 description = "Local-first Codex history memory and AI collaboration reports"
 requires-python = ">=3.10"

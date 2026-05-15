@@ -3,20 +3,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import os
 import re
 import sqlite3
 import statistics
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 
-START_MARKER = "<!-- codex-nuwa-memory:start -->"
-END_MARKER = "<!-- codex-nuwa-memory:end -->"
+START_MARKER = "<!-- codex-profile-builder:start -->"
+END_MARKER = "<!-- codex-profile-builder:end -->"
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{12,}"),

@@ -1,6 +1,6 @@
 # Vision
 
-Codex Nuwa Memory is built around a simple observation:
+Codex Profile Builder is built around a simple observation:
 
 > Codex history contains enough signal to understand how a user works, but that signal is trapped in past sessions.
 
@@ -42,7 +42,7 @@ This is not a clinical personality test. It is a collaboration-style mirror, bor
 
 ## What Makes It Different
 
-Most memory tools start remembering today. Codex Nuwa Memory can wake up the history the user already has.
+Most memory tools start remembering today. Codex Profile Builder can wake up the history the user already has.
 
 That makes the first-run experience unusually strong:
 

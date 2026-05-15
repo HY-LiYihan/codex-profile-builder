@@ -1,8 +1,8 @@
-# Codex Nuwa Memory
+# Codex Profile Builder
 
 Give Codex memory of you, without uploading your history.
 
-Codex Nuwa Memory is a local-first Codex skill and CLI that reads your Codex Desktop history, redacts sensitive data, and turns repeated patterns into useful `AGENTS.md` memory. It also includes a playful `vibe-check` report that describes how you collaborate with AI.
+Codex Profile Builder is a local-first Codex skill and CLI that reads your Codex Desktop history, redacts sensitive data, and turns repeated patterns into useful `AGENTS.md` memory. It also includes a playful `vibe-check` report that describes how you collaborate with AI.
 
 ## Why
 
@@ -29,15 +29,15 @@ Codex already has rich local history, but every new window can feel like it is m
 From this repository:
 
 ```bash
-python3 scripts/codex_nuwa_memory.py scan --limit 20
-python3 scripts/codex_nuwa_memory.py agents-preview --limit 30
-python3 scripts/codex_nuwa_memory.py vibe-check --limit 80
+python3 scripts/codex_profile_builder.py scan --limit 20
+python3 scripts/codex_profile_builder.py agents-preview --limit 30
+python3 scripts/codex_profile_builder.py vibe-check --limit 80
 ```
 
 Apply to an `AGENTS.md` file only after reviewing the preview:
 
 ```bash
-python3 scripts/codex_nuwa_memory.py agents-preview --limit 30 --agents-md ./AGENTS.md --apply
+python3 scripts/codex_profile_builder.py agents-preview --limit 30 --agents-md ./AGENTS.md --apply
 ```
 
 ## Skill Install
@@ -45,13 +45,13 @@ python3 scripts/codex_nuwa_memory.py agents-preview --limit 30 --agents-md ./AGE
 Install as a Codex skill from GitHub:
 
 ```text
-$skill-installer install https://github.com/HY-LiYihan/codex-nuwa-memory
+$skill-installer install https://github.com/HY-LiYihan/codex-profile-builder
 ```
 
 Then ask Codex:
 
 ```text
-Use $codex-nuwa-memory to preview an AGENTS.md memory update from my recent Codex history.
+Use $codex-profile-builder to preview an AGENTS.md memory update from my recent Codex history.
 ```
 
 ## Product Vision
@@ -76,7 +76,7 @@ Validate the skill and run the zero-dependency test suite:
 ```bash
 python3 /path/to/skill-creator/scripts/quick_validate.py .
 python3 -m unittest discover -s tests -v
-python3 -m py_compile scripts/codex_nuwa_memory.py
+python3 -m py_compile scripts/codex_profile_builder.py
 ```
 
 ## Status

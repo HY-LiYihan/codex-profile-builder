@@ -1,6 +1,6 @@
 # Privacy Model
 
-Codex Nuwa Memory reads local Codex history. That makes privacy the central design constraint.
+Codex Profile Builder reads local Codex history. That makes privacy the central design constraint.
 
 ## Defaults
 
