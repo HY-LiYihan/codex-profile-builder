@@ -37,6 +37,25 @@ class CodexProfileBuilderTests(unittest.TestCase):
         self.assertTrue(profile_builder.is_auto_context_message("<environment_context>\n"))
         self.assertFalse(profile_builder.is_auto_context_message("请帮我研究 AGENTS.md 记忆方案"))
 
+    def test_hydrate_redacts_thread_title(self):
+        stats = profile_builder.RedactionStats()
+        thread = profile_builder.ThreadRecord(
+            id="t1",
+            title='CODEX_TOKEN="sk-abc1234567890abcdef"',
+            cwd="/tmp/project",
+            updated_at=0,
+            rollout_path=Path("/does/not/exist"),
+        )
+        profile_builder.hydrate_threads([thread], stats)
+        self.assertNotIn("sk-abc", thread.title)
+        self.assertGreaterEqual(stats.hits, 1)
+
+    def test_safe_display_hides_sensitive_title_shape(self):
+        self.assertEqual(
+            profile_builder.safe_display_text('CODEX_TOKEN="[REDACTED_SECRET]" bash -c curl'),
+            "[REDACTED_SENSITIVE_TITLE]",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

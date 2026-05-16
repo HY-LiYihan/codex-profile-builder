@@ -44,13 +44,19 @@ The skill is local-first. It reads Codex history from the user's machine, redact
    python3 scripts/codex_profile_builder.py search "AGENTS.md memory" --top 5
    ```
 
-4. Generate a playful collaboration report:
+4. Generate a detailed user profile report:
+
+   ```bash
+   python3 scripts/codex_profile_builder.py profile-report --language zh --output AGENTS.profile-builder.generated.zh.md
+   ```
+
+5. Generate a playful collaboration report:
 
    ```bash
    python3 scripts/codex_profile_builder.py vibe-check --limit 80
    ```
 
-5. Apply a managed block only after the user approves:
+6. Apply a managed block only after the user approves:
 
    ```bash
    python3 scripts/codex_profile_builder.py agents-preview --limit 30 --agents-md ./AGENTS.md --apply
@@ -99,3 +105,13 @@ Workflow Loop: Explore -> Judge -> Build -> Verify -> Distill
 ```
 
 Always include a short note that the report is based only on Codex chat behavior.
+
+## Profile Report Workflow
+
+When the user asks for a user profile, a refined profile, or a new non-overwriting `AGENTS.md` draft:
+
+1. Run `profile-report` instead of composing the profile manually.
+2. Prefer Chinese with `--language zh` unless the user asks otherwise.
+3. Write to a new filename such as `AGENTS.profile-builder.generated.zh.md`.
+4. Do not overwrite an existing `AGENTS.md`.
+5. Scan the generated file for secrets and old naming before presenting it.

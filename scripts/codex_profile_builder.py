@@ -226,6 +226,8 @@ def parse_rollout(path: Path, stats: RedactionStats, max_messages: int = 80) -> 
 
 def hydrate_threads(threads: list[ThreadRecord], stats: RedactionStats, max_messages: int = 80) -> list[ThreadRecord]:
     for thread in threads:
+        thread.title = redact(thread.title, stats)
+        thread.cwd = redact(thread.cwd, stats)
         thread.messages = parse_rollout(thread.rollout_path, stats, max_messages=max_messages)
     return threads
 
@@ -261,6 +263,12 @@ def query_terms(query: str) -> list[str]:
 def compact_text(text: str, limit: int = 220) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text[: limit - 1] + "…" if len(text) > limit else text
+
+
+def safe_display_text(text: str, limit: int = 220) -> str:
+    if "[REDACTED_SECRET]" in text:
+        return "[REDACTED_SENSITIVE_TITLE]"
+    return compact_text(text, limit)
 
 
 def first_snippet(messages: list[Message], terms: list[str], role: str = "user") -> str:
@@ -321,6 +329,32 @@ def infer_project_themes(threads: list[ThreadRecord]) -> list[str]:
             continue
         themes.append(f"- `{name}`: appears in {count} recent Codex thread(s).")
     return themes
+
+
+def project_theme_details(threads: list[ThreadRecord], limit: int = 10) -> list[dict[str, object]]:
+    grouped: dict[str, list[ThreadRecord]] = {}
+    for thread in threads:
+        if not thread.cwd:
+            continue
+        grouped.setdefault(thread.cwd, []).append(thread)
+    details = []
+    for cwd, items in sorted(grouped.items(), key=lambda item: len(item[1]), reverse=True)[:limit]:
+        title_terms = Counter()
+        for thread in items:
+            for term in PROJECT_HINTS + TECH_TERMS + ACTION_TERMS:
+                if term.lower() in thread.title.lower():
+                    title_terms[term] += 1
+        titles = [safe_display_text(thread.title, 90) for thread in sorted(items, key=lambda item: item.updated_at, reverse=True)[:3]]
+        details.append(
+            {
+                "name": Path(cwd).name or cwd,
+                "cwd": cwd,
+                "threads": len(items),
+                "recent_titles": titles,
+                "signals": [term for term, _ in title_terms.most_common(6)],
+            }
+        )
+    return details
 
 
 def infer_preferences(texts: list[str]) -> list[str]:
@@ -393,6 +427,196 @@ def collaboration_scores(texts: list[str]) -> dict[str, int]:
         "learning": ["讲解", "解释", "是什么", "原理", "学习"],
     }
     return {name: sum(joined.count(term) for term in terms) for name, terms in categories.items()}
+
+
+def profile_metrics(threads: list[ThreadRecord], stats: RedactionStats) -> dict[str, object]:
+    texts = [text for text in user_messages(threads) if is_natural_user_text(text)]
+    lengths = [len(text) for text in texts]
+    pronouns = count_terms(texts, ["你", "您", "我", "我们", "咱们"])
+    scores = collaboration_scores(texts)
+    action_terms = Counter(count_terms(texts, ACTION_TERMS)).most_common(14)
+    tech_terms = Counter(count_terms(texts, TECH_TERMS)).most_common(12)
+    question_ratio = (sum(1 for text in texts if "?" in text or "？" in text) / len(texts)) if texts else 0
+    multi_step_ratio = (
+        sum(1 for text in texts if any(marker in text for marker in ["首先", "其次", "然后", "同时", "第一", "第二"]))
+        / len(texts)
+        if texts
+        else 0
+    )
+    return {
+        "natural_user_messages": len(texts),
+        "assistant_messages": len(assistant_messages(threads)),
+        "avg_length": statistics.mean(lengths) if lengths else 0,
+        "median_length": statistics.median(lengths) if lengths else 0,
+        "question_ratio": question_ratio,
+        "multi_step_ratio": multi_step_ratio,
+        "pronouns": pronouns,
+        "scores": scores,
+        "collaboration_type": collaboration_type(scores),
+        "action_terms": action_terms,
+        "tech_terms": tech_terms,
+        "redaction_hits": stats.hits,
+        "project_details": project_theme_details(threads),
+    }
+
+
+def render_profile_report(threads: list[ThreadRecord], stats: RedactionStats, language: str = "zh") -> str:
+    metrics = profile_metrics(threads, stats)
+    block = agents_block(threads, stats).strip()
+    if language == "en":
+        projects = "\n".join(
+            f"- `{item['name']}`: {item['threads']} thread(s). Signals: {', '.join(item['signals']) or 'general work'}. Recent: {'; '.join(item['recent_titles'])}"
+            for item in metrics["project_details"]
+        )
+        actions = "\n".join(f"- {term}: {count}" for term, count in metrics["action_terms"])
+        tech = "\n".join(f"- {term}: {count}" for term, count in metrics["tech_terms"])
+        scores = "\n".join(f"- {name}: {value}" for name, value in sorted(metrics["scores"].items(), key=lambda item: item[1], reverse=True))
+        pronouns = "\n".join(f"- {name}: {value}" for name, value in metrics["pronouns"].items())
+        return f"""# Generated Agent Profile
+
+This file was generated by Codex Profile Builder from local Codex history. It is a draft and does not replace any existing `AGENTS.md`.
+
+## Executive Profile
+
+- Collaboration type: {metrics['collaboration_type']}
+- The user primarily collaborates in Chinese with English technical terms mixed in.
+- The user prefers direct, actionable engineering guidance and clear implementation/verification loops.
+- The user values bounded, incremental, privacy-aware memory updates.
+
+## Preferred Agent Protocol
+
+- Read relevant local context before making strong claims.
+- Make a crisp judgment once enough evidence is available.
+- Implement and verify when the request implies action.
+- Use subagents for exploration, verification, large scans, and long-running checks when authorized.
+- Keep progress updates short and informative.
+- Never persist or print secrets, tokens, private keys, auth headers, or full sensitive commands.
+
+## Project Map
+
+{projects or '- No stable project themes detected.'}
+
+## Communication Fingerprint
+
+- Natural user messages: {metrics['natural_user_messages']}
+- Assistant messages: {metrics['assistant_messages']}
+- Average user-message length: {metrics['avg_length']:.1f} characters
+- Median user-message length: {metrics['median_length']:.1f} characters
+- Question-mark ratio: {metrics['question_ratio']:.1%}
+- Multi-step instruction ratio: {metrics['multi_step_ratio']:.1%}
+- Redaction hits: {metrics['redaction_hits']}
+
+## Pronoun Style
+
+{pronouns or '- No pronoun signal detected.'}
+
+## Collaboration Scores
+
+{scores}
+
+## High-Signal Action Terms
+
+{actions or '- No action signal detected.'}
+
+## High-Signal Technical Terms
+
+{tech or '- No technical signal detected.'}
+
+## Memory Hygiene
+
+- Do not persist API keys, tokens, secrets, private keys, cookies, auth headers, full sensitive commands, or raw logs.
+- Do not infer medical, legal, financial, identity, or formal psychological facts from casual chat.
+- Treat personality labels as collaboration analytics, not psychological assessment.
+- Prefer concise, operational memory over biography.
+
+## Candidate Managed Block
+
+{block}
+"""
+
+    projects = "\n".join(
+        f"- `{item['name']}`：{item['threads']} 个线程。信号：{('、'.join(item['signals']) if item['signals'] else '通用工作')}。近期标题：{'；'.join(item['recent_titles'])}"
+        for item in metrics["project_details"]
+    )
+    actions = "\n".join(f"- {term}：{count}" for term, count in metrics["action_terms"])
+    tech = "\n".join(f"- {term}：{count}" for term, count in metrics["tech_terms"])
+    scores = "\n".join(f"- {name}：{value}" for name, value in sorted(metrics["scores"].items(), key=lambda item: item[1], reverse=True))
+    pronouns = "\n".join(f"- {name}：{value}" for name, value in metrics["pronouns"].items())
+    return f"""# 生成版 Agent 用户画像
+
+本文件由 Codex Profile Builder 基于本机 Codex 历史生成。这是候选草案，不会替换任何现有的 `AGENTS.md`。
+
+## 总体画像
+
+- 协作类型：{metrics['collaboration_type']}
+- 用户主要用中文与 Codex 协作，会自然混用英文技术术语。
+- 用户偏好直接、有判断、可执行的工程建议，不喜欢只停留在抽象方案。
+- 用户常从探索、检索或可行性判断开始，然后推进到实现、测试和总结闭环。
+- 用户对 token 成本敏感，偏好限量、增量、可追溯、按需检索的处理方式。
+- 用户把凭据和敏感命令输出视为记忆禁区。
+
+## 推荐 Agent 协作协议
+
+- 在做强判断前，先阅读相关代码、文档或本地状态。
+- 一旦证据足够，要给出清晰判断，不要一直停留在模糊可能性。
+- 当请求明显指向行动时，优先推进实现和验证，而不是只给建议。
+- 在用户授权或明确要求时，用 subagent 并行处理探索、状态检查、验证、大规模扫描等任务。
+- 工作过程中给用户简洁、有信息量的进度更新。
+- 完成后总结改了什么、验证了什么、还有哪些风险。
+- 不输出原始 secret、token、API key、auth header、私钥或完整敏感 shell 命令。
+
+## 项目地图
+
+{projects or '- 未检测到稳定项目主题。'}
+
+## 沟通指纹
+
+- 用户自然消息：{metrics['natural_user_messages']} 条。
+- assistant 消息：{metrics['assistant_messages']} 条。
+- 用户消息平均长度：{metrics['avg_length']:.1f} 字符。
+- 用户消息中位长度：{metrics['median_length']:.1f} 字符。
+- 问号比例：{metrics['question_ratio']:.1%}。
+- 多步骤指令比例：{metrics['multi_step_ratio']:.1%}。
+- 画像生成过程中的脱敏命中：{metrics['redaction_hits']} 次。
+
+## 人称风格
+
+{pronouns or '- 未检测到明显人称信号。'}
+
+## 协作需求分布
+
+{scores}
+
+## 高频动作词
+
+{actions or '- 未检测到明显动作信号。'}
+
+## 高频技术词
+
+{tech or '- 未检测到明显技术信号。'}
+
+## AI 协作人格
+
+类型：{metrics['collaboration_type']}
+
+- 这是娱乐化协作分析，不是正式心理测评。
+- 用户更像项目 owner 和研究合伙人，而不是被动问答用户。
+- 用户经常先表达自己的判断，再把 agent 拉入共同推进状态。
+- 用户很多问题不是用问号表达，而是用探索式指令或目标描述表达。
+- 常见工作流：探索 -> 判断可行性 -> 设计 MVP -> 实现 -> 测试 -> 修正 -> 总结沉淀。
+
+## 记忆卫生规则
+
+- 不持久化 API key、token、secret、私钥、cookie、auth header、完整敏感命令或原始日志。
+- 不从闲聊中推断医疗、法律、财务、身份或正式心理结论。
+- AI 协作人格标签只作为娱乐化协作分析，不作为正式心理测评。
+- 长期记忆应该简洁、可操作，不写成长篇传记。
+- 优先做可追溯、增量式的小更新，不做一次性全历史大摘要。
+
+## 可放入 AGENTS.md 的候选托管区块
+
+{block}
+"""
 
 
 def collaboration_type(scores: dict[str, int]) -> str:
@@ -523,7 +747,7 @@ def search(args: argparse.Namespace) -> None:
                 "score": round(score, 2),
                 "matched_terms": matched,
                 "thread_id": thread.id,
-                "title": compact_text(thread.title, 160),
+                "title": safe_display_text(thread.title, 160),
                 "cwd": thread.cwd,
                 "updated_at": unix_to_iso(thread.updated_at),
                 "snippet": first_snippet(thread.messages, terms, args.snippet_role),
@@ -574,6 +798,19 @@ def vibe_check(args: argparse.Namespace) -> None:
     print(report)
 
 
+def profile_report(args: argparse.Namespace) -> None:
+    stats = RedactionStats()
+    threads = hydrate_threads(load_threads(codex_home(args.codex_home), args.limit, args.since_days), stats, max_messages=args.max_messages)
+    report = render_profile_report(threads, stats, args.language)
+    if args.output:
+        path = Path(args.output).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(report, encoding="utf-8")
+        print(f"Wrote profile report to {path}")
+        return
+    print(report)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Local-first Codex history memory and AI collaboration reports")
     parser.add_argument("--codex-home", default=None, help="Codex home directory, default ~/.codex")
@@ -609,6 +846,14 @@ def build_parser() -> argparse.ArgumentParser:
     vibe_parser.add_argument("--since-days", type=int, default=None)
     vibe_parser.add_argument("--output", default=None)
     vibe_parser.set_defaults(func=vibe_check)
+
+    profile_parser = sub.add_parser("profile-report", help="Generate a detailed user profile and AGENTS.md candidate block")
+    profile_parser.add_argument("--limit", type=int, default=120)
+    profile_parser.add_argument("--since-days", type=int, default=None)
+    profile_parser.add_argument("--max-messages", type=int, default=120)
+    profile_parser.add_argument("--language", choices=["zh", "en"], default="zh")
+    profile_parser.add_argument("--output", default=None)
+    profile_parser.set_defaults(func=profile_report)
 
     return parser
 

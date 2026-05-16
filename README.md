@@ -31,6 +31,7 @@ From this repository:
 ```bash
 python3 scripts/codex_profile_builder.py scan --limit 20
 python3 scripts/codex_profile_builder.py search "AGENTS.md memory" --top 5
+python3 scripts/codex_profile_builder.py profile-report --language zh --output AGENTS.profile-builder.generated.zh.md
 python3 scripts/codex_profile_builder.py agents-preview --limit 30
 python3 scripts/codex_profile_builder.py vibe-check --limit 80
 ```
